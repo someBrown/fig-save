@@ -139,10 +139,36 @@ const shouldDownload = ([id]) => {
   return false;
 };
 
+const resolveFromUrl = (url) => {
+  const urlObj = new URL(url);
+  const regex = /file\/([-\w]+)\//;
+  const match = urlObj.pathname.match(regex);
+  let key;
+
+  if (match) {
+    key = match[1];
+  }
+  const id = urlObj.searchParams.get('node-id');
+  if (key && id) {
+    return {
+      key,
+      id,
+    };
+  } else {
+    throw new Error('Failure to parse parameters from URL');
+  }
+};
+
 const saveImgs = async (key, id, options = {}) => {
-  key = decodeURIComponent(key);
-  id = decodeURIComponent(id);
   try {
+    if (key.startsWith('https')) {
+      const res = resolveFromUrl(decodeURIComponent(key));
+      id = res.id;
+      key = res.key;
+    } else {
+      key = decodeURIComponent(key);
+      id = decodeURIComponent(id);
+    }
     mergedOptions = merge(DEFAULT_DOWNLOAD_OPTIONS, options);
     figmaApi = await useFigmaApi();
     const imgUrlsInfo = await getImgUrlsInfo(key, id);

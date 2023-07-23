@@ -1,6 +1,6 @@
 ### 使用场景
 
-UI 把项目切图单独放在 Figma 文件某个 node 下，可以理解成切图单独放一块，该脚本通过 file key 和 node id 匹配并解析内容后批量
+UI 把项目切图单独放在 Figma 文件某个 node 下，该脚本通过 file key 和 node id 匹配并解析内容后批量
 下载到本地，图片以对应的 node 名称命名。目前默认解析为切图的 node 类型是["FRAME", "COMPONENT"]，可通过 figmaImgTypes 参数修改。
 
 注意：由于存在即使是完全相同的 Node 节点,每次获取到的图片 url 也不同的限制，所以无法通过判断 url 来更新已下载的本地图片。
@@ -25,6 +25,12 @@ import { saveImgs } from 'fig-save';
 import saveImgs from 'fig-save';
 
 // https://www.figma.com/file/:key/:title?node-id=:id
+saveImgs(url, options);
+```
+
+```js
+// 如果URL规则变动 解析失败也可以直接传入key id
+// https://www.figma.com/file/:key/:title?node-id=:id
 saveImgs(key, id, options);
 ```
 
@@ -39,3 +45,8 @@ saveImgs(key, id, options);
 | figmaImgTypes | ["FRAME", "COMPONENT"] | Figma 节点转图片下载的类型范围 |
 
 [其他图片参数，详见官方文档](https://www.figma.com/developers/api#get-images-endpoint)
+
+### TODO:
+
+- [ ] 通过UI指定切图的唯一标记，下载任意node节点下的切图
+- [ ] 通过文件etag判断，跳过重复文件下载
