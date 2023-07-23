@@ -1,6 +1,6 @@
 {
   "name": "fig-save",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Batch download images from figma",
   "main": "dist/index.js",
   "module": "dist/index.js",
@@ -15,8 +15,13 @@
     "images",
     "save"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/someBrown/fig-save"
+  },
+  "homepage": "https://github.com/someBrown/fig-save",
   "author": "someBrown",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "cli-progress": "^3.12.0",
     "figma-api": "^1.11.0",
