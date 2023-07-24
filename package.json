@@ -1,6 +1,6 @@
 {
   "name": "fig-save",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Batch download images from figma",
   "main": "dist/index.js",
   "module": "dist/index.js",
@@ -30,12 +30,12 @@
     "ora": "^6.3.1",
     "picocolors": "^1.0.0",
     "read-pkg": "^8.0.0",
-    "webpack-merge": "^5.9.0"
+    "webpack-merge": "^5.9.0",
+    "fs-extra": "^11.1.1"
   },
   "devDependencies": {
     "conventional-changelog": "^4.0.0",
     "eslint": "^8.45.0",
-    "fs-extra": "^11.1.1",
     "prettier": "^3.0.0",
     "rollup": "^3.26.3",
     "rollup-plugin-cleanup": "^3.2.1"

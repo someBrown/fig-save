@@ -28,12 +28,6 @@ import saveImgs from 'fig-save';
 saveImgs(url, options);
 ```
 
-```js
-// 如果URL规则变动 解析失败也可以直接传入key id
-// https://www.figma.com/file/:key/:title?node-id=:id
-saveImgs(key, id, options);
-```
-
 ### Options
 
 |     名字      |          默认          |              描述              |

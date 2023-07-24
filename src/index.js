@@ -139,7 +139,7 @@ const shouldDownload = ([id]) => {
   return false;
 };
 
-const resolveFromUrl = (url) => {
+const resolveParamsFromUrl = (url) => {
   const urlObj = new URL(url);
   const regex = /file\/([-\w]+)\//;
   const match = urlObj.pathname.match(regex);
@@ -159,16 +159,9 @@ const resolveFromUrl = (url) => {
   }
 };
 
-const saveImgs = async (key, id, options = {}) => {
+const saveImgs = async (url, options = {}) => {
   try {
-    if (key.startsWith('https')) {
-      const res = resolveFromUrl(decodeURIComponent(key));
-      id = res.id;
-      key = res.key;
-    } else {
-      key = decodeURIComponent(key);
-      id = decodeURIComponent(id);
-    }
+    const { key, id } = resolveParamsFromUrl(decodeURIComponent(url));
     mergedOptions = merge(DEFAULT_DOWNLOAD_OPTIONS, options);
     figmaApi = await useFigmaApi();
     const imgUrlsInfo = await getImgUrlsInfo(key, id);
