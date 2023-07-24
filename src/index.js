@@ -59,28 +59,35 @@ const getImgUrlsInfo = async (key, id) => {
   return imgUrlsInfo;
 };
 
+const getMetadata = () => {
+  const metadataFilePath = getMetadataFilePath();
+  return (
+    (pathExistsSync(metadataFilePath) && readJsonSync(metadataFilePath)) || {}
+  );
+};
+
 const handleSucceedResult = (succeedCollections, totalImgUrlsInfo) => {
   // 记录成功的数据防止重复下载
   const metadata = succeedCollections.reduce((acc, item) => {
-    acc[item.value] = {
-      shouldDownload: false,
-      url: totalImgUrlsInfo[item.value].url,
-      name: totalImgUrlsInfo[item.value].name,
+    const { id, eTag } = item.value;
+    acc[id] = {
+      shouldDownload: true,
+      url: totalImgUrlsInfo[id].url,
+      name: totalImgUrlsInfo[id].name,
+      eTag,
     };
     return acc;
   }, {});
 
   const metadataFilePath = getMetadataFilePath();
-
-  const existedMetadata =
-    (pathExistsSync(metadataFilePath) && readJsonSync(metadataFilePath)) || {};
+  const existedMetadata = getMetadata();
   const mergedMetadata = merge(existedMetadata, metadata);
   outputJsonSync(metadataFilePath, mergedMetadata);
 };
 
 const handleFailedResult = (succeedCollections, totalImgUrlsInfo) => {
   const succeedIdsMap = succeedCollections.reduce((acc, item) => {
-    acc[item.value] = true;
+    acc[item.value.id] = true;
     return acc;
   }, {});
   const failedCollections = Object.keys(totalImgUrlsInfo)
@@ -120,23 +127,12 @@ const handleResult = (result, totalImgUrlsInfo) => {
 };
 
 const shouldDownload = ([id]) => {
-  const metadata =
-    (pathExistsSync(getMetadataFilePath()) &&
-      readJsonSync(getMetadataFilePath())) ||
-    {};
+  const metadata = getMetadata();
   const curInfo = metadata[id];
   if (!curInfo) {
     return true;
   }
-  const saveDir = mergedOptions.saveDir;
-  const filename = `${curInfo.name}.${mergedOptions.format}`;
-  const filePath = `${saveDir}/${filename}`;
-  //TODO 文件已经存在 怎么判断当前文件和要下载的文件不是同一个
-  if (!pathExistsSync(filePath) && shouldDownload) {
-    // 文件夹不存在不一定需要重新下载 下载过的文件想重新下载 应该更新metadata
-    return true;
-  }
-  return false;
+  return curInfo['shouldDownload'];
 };
 
 const resolveParamsFromUrl = (url) => {
@@ -172,18 +168,18 @@ const saveImgs = async (url, options = {}) => {
       console.log('\n' + picocolors.green('Done🎉'));
       return;
     }
-
+    const metadata = getMetadata();
     const { progressBar } = useProgressBar(shouldDownloadImgUrls.length);
     progressBar.start(shouldDownloadImgUrls.length, 0);
     const promises = shouldDownloadImgUrls.map(([id, { url, name }]) => () => {
       const saveDir = mergedOptions.saveDir;
       const filename = `${name}.${mergedOptions.format}`;
-
       return useDownload({
         id,
         url,
         saveDir,
         filename,
+        previousEtag: metadata[id]?.eTag,
         onComplete: progressBar.increment.bind(progressBar),
       });
     });

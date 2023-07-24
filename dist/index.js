@@ -80,15 +80,39 @@ const DEFAULT_DOWNLOAD_OPTIONS = {
 const TOKEN_FILE_NAME = 'token.json';
 const METADATA_FILE_NAME = 'metadata.json';
 
-const useDownload = ({ id, url, saveDir, filename, onComplete }) =>
+const useDownload = ({
+  id,
+  url,
+  saveDir,
+  filename,
+  previousEtag,
+  onComplete,
+}) =>
   new Promise((resolve, reject) => {
-    https.get(url, (res) => {
+    const abortController = new AbortController();
+    const signal = abortController.signal;
+    const _resolve = (res) => {
+      resolve(res);
+      onComplete();
+    };
+    https.get(url, { signal }, (res) => {
+      const eTag = res.headers['etag'];
+      if (eTag === previousEtag) {
+        abortController.abort();
+        _resolve({
+          id,
+          eTag,
+        });
+        return;
+      }
       mkdirsSync(saveDir);
       const fileStream = fs.createWriteStream(`${saveDir}/${filename}`);
       res.pipe(fileStream);
       res.on(EVENTS.END, () => {
-        onComplete();
-        resolve(id);
+        _resolve({
+          id,
+          eTag,
+        });
       });
       res.on(EVENTS.ERROR, () => {
         reject();
@@ -190,24 +214,31 @@ const getImgUrlsInfo = async (key, id) => {
   }, {});
   return imgUrlsInfo;
 };
+const getMetadata = () => {
+  const metadataFilePath = getMetadataFilePath();
+  return (
+    (pathExistsSync(metadataFilePath) && readJsonSync(metadataFilePath)) || {}
+  );
+};
 const handleSucceedResult = (succeedCollections, totalImgUrlsInfo) => {
   const metadata = succeedCollections.reduce((acc, item) => {
-    acc[item.value] = {
-      shouldDownload: false,
-      url: totalImgUrlsInfo[item.value].url,
-      name: totalImgUrlsInfo[item.value].name,
+    const { id, eTag } = item.value;
+    acc[id] = {
+      shouldDownload: true,
+      url: totalImgUrlsInfo[id].url,
+      name: totalImgUrlsInfo[id].name,
+      eTag,
     };
     return acc;
   }, {});
   const metadataFilePath = getMetadataFilePath();
-  const existedMetadata =
-    (pathExistsSync(metadataFilePath) && readJsonSync(metadataFilePath)) || {};
+  const existedMetadata = getMetadata();
   const mergedMetadata = merge(existedMetadata, metadata);
   outputJsonSync(metadataFilePath, mergedMetadata);
 };
 const handleFailedResult = (succeedCollections, totalImgUrlsInfo) => {
   const succeedIdsMap = succeedCollections.reduce((acc, item) => {
-    acc[item.value] = true;
+    acc[item.value.id] = true;
     return acc;
   }, {});
   const failedCollections = Object.keys(totalImgUrlsInfo)
@@ -242,21 +273,12 @@ const handleResult = (result, totalImgUrlsInfo) => {
   handleFailedResult(succeedCollections, totalImgUrlsInfo);
 };
 const shouldDownload = ([id]) => {
-  const metadata =
-    (pathExistsSync(getMetadataFilePath()) &&
-      readJsonSync(getMetadataFilePath())) ||
-    {};
+  const metadata = getMetadata();
   const curInfo = metadata[id];
   if (!curInfo) {
     return true;
   }
-  const saveDir = mergedOptions.saveDir;
-  const filename = `${curInfo.name}.${mergedOptions.format}`;
-  const filePath = `${saveDir}/${filename}`;
-  if (!pathExistsSync(filePath) && shouldDownload) {
-    return true;
-  }
-  return false;
+  return curInfo['shouldDownload'];
 };
 const resolveParamsFromUrl = (url) => {
   const urlObj = new URL(url);
@@ -288,6 +310,7 @@ const saveImgs = async (url, options = {}) => {
       console.log('\n' + picocolors.green('Done🎉'));
       return;
     }
+    const metadata = getMetadata();
     const { progressBar } = useProgressBar(shouldDownloadImgUrls.length);
     progressBar.start(shouldDownloadImgUrls.length, 0);
     const promises = shouldDownloadImgUrls.map(([id, { url, name }]) => () => {
@@ -298,6 +321,7 @@ const saveImgs = async (url, options = {}) => {
         url,
         saveDir,
         filename,
+        previousEtag: metadata[id]?.eTag,
         onComplete: progressBar.increment.bind(progressBar),
       });
     });
