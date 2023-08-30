@@ -20,7 +20,7 @@ export const useDownload = ({
       onComplete();
     };
 
-    https.get(url, { signal }, (res) => {
+    const req = https.get(url, { signal }, (res) => {
       const eTag = res.headers['etag'];
       if (eTag === previousEtag) {
         abortController.abort();
@@ -42,5 +42,8 @@ export const useDownload = ({
       res.on(EVENTS.ERROR, () => {
         reject();
       });
+    });
+    req.on(EVENTS.ERROR, () => {
+      reject();
     });
   });

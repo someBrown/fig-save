@@ -1,9 +1,6 @@
 import fs from 'fs';
 
 import ora from 'ora';
-// import * as Figma from "figma-api";
-
-// export const figmaApi = (key)
 
 export const promisePool = async (functions, n) => {
   const concurrency = Math.min(n, functions.length);
@@ -49,7 +46,7 @@ export const readFileSync = (path) => {
   }
 };
 
-export const showLoading = async (promise, options) => {
+export const useAsyncWithLoading = async (promise, options) => {
   const spinner = ora(options).start();
   try {
     return await promise;

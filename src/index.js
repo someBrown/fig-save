@@ -2,9 +2,10 @@ import path from 'path';
 import picocolors from 'picocolors';
 import { merge } from 'webpack-merge';
 import { outputJsonSync, readJsonSync, pathExistsSync } from 'fs-extra/esm';
-import { promisePool, showLoading } from './utils.js';
+import { promisePool, useAsyncWithLoading } from './utils.js';
 import { useProgressBar } from './useProgressBar.js';
 import { useDownload } from './useDownload.js';
+import { useETag } from './useETag.js';
 import {
   DEFAULT_DOWNLOAD_OPTIONS,
   METADATA_FILE_NAME,
@@ -19,7 +20,7 @@ const getMetadataFilePath = () =>
   path.join(mergedOptions.saveDir, METADATA_FILE_NAME);
 
 const getImgUrlsInfo = async (key, id) => {
-  const fileInfo = await showLoading(
+  const fileInfo = await useAsyncWithLoading(
     figmaApi(FIGMA_API_TYPE.GET_FILE_NODES, key, [id]),
     {
       suffixText: '🐢',
@@ -35,7 +36,7 @@ const getImgUrlsInfo = async (key, id) => {
       return acc;
     }, {});
 
-  const { err, images: imgUrls } = await showLoading(
+  const { err, images: imgUrls } = await useAsyncWithLoading(
     figmaApi(FIGMA_API_TYPE.GET_IMAGE, key, {
       ids: Object.keys(imgNamesMap),
       ...mergedOptions,
@@ -126,15 +127,6 @@ const handleResult = (result, totalImgUrlsInfo) => {
   handleFailedResult(succeedCollections, totalImgUrlsInfo);
 };
 
-const shouldDownload = ([id]) => {
-  const metadata = getMetadata();
-  const curInfo = metadata[id];
-  if (!curInfo) {
-    return true;
-  }
-  return curInfo['shouldDownload'];
-};
-
 const resolveParamsFromUrl = (url) => {
   const urlObj = new URL(url);
   const regex = /file\/([-\w]+)\//;
@@ -155,45 +147,85 @@ const resolveParamsFromUrl = (url) => {
   }
 };
 
+const getETag = async (imgUrlsInfo) => {
+  console.log(picocolors.green('Compare Etag...'));
+  const totalNums = Object.keys(imgUrlsInfo).length;
+  const { progressBar } = useProgressBar(totalNums);
+  progressBar.start(totalNums, 0);
+  const promises = Object.entries(imgUrlsInfo).map(([id, { url }]) => () => {
+    return useETag({
+      id,
+      url,
+      onComplete: progressBar.increment.bind(progressBar),
+    });
+  });
+
+  const result = await promisePool(promises, totalNums);
+
+  const eTags = result
+    .filter((item) => item.status === 'fulfilled')
+    .map((item) => item.value.eTag);
+
+  return { eTags };
+};
+
+const filterByMetadata = (metadata) => {
+  return ([id]) => {
+    const curInfo = metadata[id];
+    if (!curInfo) {
+      return true;
+    }
+    return curInfo['shouldDownload'];
+  };
+};
+
+const filterByTags = (eTags, metadata) => {
+  return ([id]) => {
+    return !eTags.includes(metadata[id]?.eTag);
+  };
+};
+
 const saveImgs = async (url, options = {}) => {
   try {
     const { key, id } = resolveParamsFromUrl(decodeURIComponent(url));
     mergedOptions = merge(DEFAULT_DOWNLOAD_OPTIONS, options);
+    const metadata = getMetadata(mergedOptions);
     figmaApi = await useFigmaApi();
-    const imgUrlsInfo = await getImgUrlsInfo(key, id);
-    const shouldDownloadImgUrls =
-      Object.entries(imgUrlsInfo).filter(shouldDownload);
-
-    if (!shouldDownloadImgUrls.length) {
+    let imgUrlsInfo = await getImgUrlsInfo(key, id, getImgUrlsInfo);
+    imgUrlsInfo = Object.fromEntries(
+      Object.entries(imgUrlsInfo).filter(filterByMetadata(metadata)),
+    );
+    const { eTags } = await getETag(imgUrlsInfo);
+    imgUrlsInfo = Object.fromEntries(
+      Object.entries(imgUrlsInfo).filter(filterByTags(eTags, metadata)),
+    );
+    const sdImgNums = Object.keys(imgUrlsInfo).length;
+    if (!sdImgNums) {
       console.log('\n' + picocolors.green('Done🎉'));
       return;
     }
-    const metadata = getMetadata();
-    const { progressBar } = useProgressBar(shouldDownloadImgUrls.length);
-    progressBar.start(shouldDownloadImgUrls.length, 0);
-    const promises = shouldDownloadImgUrls.map(([id, { url, name }]) => () => {
-      const saveDir = mergedOptions.saveDir;
-      const filename = `${name}.${mergedOptions.format}`;
-      return useDownload({
-        id,
-        url,
-        saveDir,
-        filename,
-        previousEtag: metadata[id]?.eTag,
-        onComplete: progressBar.increment.bind(progressBar),
-      });
-    });
 
+    const { progressBar } = useProgressBar(sdImgNums);
+    progressBar.start(sdImgNums, 0);
+    const promises = Object.entries(imgUrlsInfo).map(
+      ([id, { url, name }]) =>
+        () => {
+          const saveDir = mergedOptions.saveDir;
+          const filename = `${name}.${mergedOptions.format}`;
+          return useDownload({
+            id,
+            url,
+            saveDir,
+            filename,
+            previousEtag: metadata[id]?.eTag,
+            onComplete: progressBar.increment.bind(progressBar),
+          });
+        },
+    );
+    console.log(picocolors.green('Downloading... 🐢'));
     const result = await promisePool(promises, mergedOptions.concurrency);
 
-    const shouldDownloadImgUrlsInfo = shouldDownloadImgUrls.reduce(
-      (acc, [id, value]) => {
-        acc[id] = value;
-        return acc;
-      },
-      {},
-    );
-    handleResult(result, shouldDownloadImgUrlsInfo);
+    handleResult(result, imgUrlsInfo);
     console.log('\n' + picocolors.green('Done🎉'));
   } catch (err) {
     if (!err.isAxiosError) {

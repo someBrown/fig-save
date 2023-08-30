@@ -1,6 +1,6 @@
 {
   "name": "fig-save",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Batch download images from figma",
   "main": "dist/index.js",
   "module": "dist/index.js",
