@@ -1,6 +1,6 @@
-import fs from 'fs';
-
 import ora from 'ora';
+
+import { readJsonSync, pathExistsSync, outputJsonSync } from 'fs-extra/esm';
 
 export const promisePool = async (functions, n) => {
   const concurrency = Math.min(n, functions.length);
@@ -11,13 +11,16 @@ export const promisePool = async (functions, n) => {
       .map(async () => {
         const result = [];
         while (replicatedFunctions.length) {
+          // const res = await replicatedFunctions.shift()();
+          // result.push(res);
           try {
             const res = await replicatedFunctions.shift()();
             result.push({
               status: 'fulfilled',
               value: res,
             });
-          } catch {
+          } catch (e) {
+            console.log(e);
             result.push({
               status: 'rejected',
             });
@@ -29,23 +32,6 @@ export const promisePool = async (functions, n) => {
   return result.flat();
 };
 
-export const writeFileSync = (path, data) => {
-  try {
-    fs.writeFileSync(path, JSON.stringify(data), 'utf-8');
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-export const readFileSync = (path) => {
-  try {
-    return JSON.parse(fs.readFileSync(path, 'utf-8'));
-  } catch {
-    return null;
-  }
-};
-
 export const useAsyncWithLoading = async (promise, options) => {
   const spinner = ora(options).start();
   try {
@@ -55,4 +41,30 @@ export const useAsyncWithLoading = async (promise, options) => {
   } finally {
     spinner.stop();
   }
+};
+
+export const filterObject = (Obj, filter) =>
+  Object.fromEntries(Object.entries(Obj).filter(filter));
+
+export const getMetadata = (path) => {
+  return (pathExistsSync(path) && readJsonSync(path)) || {};
+};
+
+export const writeMetadata = (path, metadata) => {
+  outputJsonSync(path, metadata);
+};
+
+export const resolveParamsFromUrl = (url) => {
+  const urlObj = new URL(url);
+  const regex = /file\/([-\w]+)\//;
+  const match = urlObj.pathname.match(regex);
+  let key;
+  if (match) {
+    key = match[1];
+  }
+  const id = urlObj.searchParams.get('node-id');
+  return {
+    key,
+    id,
+  };
 };

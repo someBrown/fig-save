@@ -1,11 +1,11 @@
 import path from 'path';
 import picocolors from 'picocolors';
 import { merge } from 'webpack-merge';
-import { mkdirsSync, pathExistsSync, readJsonSync, outputJsonSync, removeSync } from 'fs-extra/esm';
-import fs from 'fs';
 import ora from 'ora';
+import { pathExistsSync, readJsonSync, outputJsonSync, mkdirsSync, removeSync } from 'fs-extra/esm';
 import cliProgress from 'cli-progress';
 import https from 'https';
+import fs from 'fs';
 import * as Figma from 'figma-api';
 import findCacheDirectory from 'find-cache-dir';
 import inquirer from 'inquirer';
@@ -26,7 +26,8 @@ const promisePool = async (functions, n) => {
               status: 'fulfilled',
               value: res,
             });
-          } catch {
+          } catch (e) {
+            console.log(e);
             result.push({
               status: 'rejected',
             });
@@ -46,6 +47,28 @@ const useAsyncWithLoading = async (promise, options) => {
   } finally {
     spinner.stop();
   }
+};
+const filterObject = (Obj, filter) =>
+  Object.fromEntries(Object.entries(Obj).filter(filter));
+const getMetadata = (path) => {
+  return (pathExistsSync(path) && readJsonSync(path)) || {};
+};
+const writeMetadata = (path, metadata) => {
+  outputJsonSync(path, metadata);
+};
+const resolveParamsFromUrl = (url) => {
+  const urlObj = new URL(url);
+  const regex = /file\/([-\w]+)\//;
+  const match = urlObj.pathname.match(regex);
+  let key;
+  if (match) {
+    key = match[1];
+  }
+  const id = urlObj.searchParams.get('node-id');
+  return {
+    key,
+    id,
+  };
 };
 
 const useProgressBar = () => {
@@ -80,31 +103,14 @@ const DEFAULT_DOWNLOAD_OPTIONS = {
 const TOKEN_FILE_NAME = 'token.json';
 const METADATA_FILE_NAME = 'metadata.json';
 
-const useDownload = ({
-  id,
-  url,
-  saveDir,
-  filename,
-  previousEtag,
-  onComplete,
-}) =>
+const useDownload = ({ id, url, saveDir, filename, onComplete }) =>
   new Promise((resolve, reject) => {
-    const abortController = new AbortController();
-    const signal = abortController.signal;
     const _resolve = (res) => {
       resolve(res);
-      onComplete();
+      onComplete(res);
     };
-    const req = https.get(url, { signal }, (res) => {
-      const eTag = res.headers['etag'];
-      if (eTag === previousEtag) {
-        abortController.abort();
-        _resolve({
-          id,
-          eTag,
-        });
-        return;
-      }
+    const req = https.get(url, (res) => {
+      const eTag = res.headers.etag;
       mkdirsSync(saveDir);
       const fileStream = fs.createWriteStream(`${saveDir}/${filename}`);
       res.pipe(fileStream);
@@ -144,7 +150,7 @@ const useETag = ({ id, url, onComplete }) =>
     req.end();
   });
 
-let figmaApi$1 = null;
+let figmaApi = null;
 const getTokenFilePath = async () => {
   const { name } = await readPackage({ cwd: CURRENT_ROOT });
   const thunk = findCacheDirectory({ name, create: true, thunk: true });
@@ -180,12 +186,12 @@ const handleError = (err) => {
   }
 };
 const useFigmaApi = async () => {
-  if (!figmaApi$1) {
+  if (!figmaApi) {
     const token = await getToken();
     const _figmaAPi = new Figma.Api({
       personalAccessToken: token,
     });
-    figmaApi$1 = async (type, ...rest) => {
+    figmaApi = async (type, ...rest) => {
       try {
         return await _figmaAPi[type](...rest);
       } catch (e) {
@@ -194,14 +200,19 @@ const useFigmaApi = async () => {
       }
     };
   }
-  return figmaApi$1;
+  return figmaApi;
 };
 
-let figmaApi;
 let mergedOptions = {};
-const getMetadataFilePath = () =>
-  path.join(mergedOptions.saveDir, METADATA_FILE_NAME);
+let metadataPath = '';
+const updateMetadataPath = () => {
+  metadataPath = path.join(mergedOptions.saveDir, METADATA_FILE_NAME);
+};
+const updateMergedOptions = (options) => {
+  mergedOptions = merge(DEFAULT_DOWNLOAD_OPTIONS, options);
+};
 const getImgUrlsInfo = async (key, id) => {
+  const figmaApi = await useFigmaApi();
   const fileInfo = await useAsyncWithLoading(
     figmaApi(FIGMA_API_TYPE.GET_FILE_NODES, key, [id]),
     {
@@ -238,12 +249,6 @@ const getImgUrlsInfo = async (key, id) => {
   }, {});
   return imgUrlsInfo;
 };
-const getMetadata = () => {
-  const metadataFilePath = getMetadataFilePath();
-  return (
-    (pathExistsSync(metadataFilePath) && readJsonSync(metadataFilePath)) || {}
-  );
-};
 const handleSucceedResult = (succeedCollections, totalImgUrlsInfo) => {
   const metadata = succeedCollections.reduce((acc, item) => {
     const { id, eTag } = item.value;
@@ -255,10 +260,9 @@ const handleSucceedResult = (succeedCollections, totalImgUrlsInfo) => {
     };
     return acc;
   }, {});
-  const metadataFilePath = getMetadataFilePath();
-  const existedMetadata = getMetadata();
+  const existedMetadata = getMetadata(metadataPath);
   const mergedMetadata = merge(existedMetadata, metadata);
-  outputJsonSync(metadataFilePath, mergedMetadata);
+  writeMetadata(metadataPath, mergedMetadata);
 };
 const handleFailedResult = (succeedCollections, totalImgUrlsInfo) => {
   const succeedIdsMap = succeedCollections.reduce((acc, item) => {
@@ -296,93 +300,76 @@ const handleResult = (result, totalImgUrlsInfo) => {
   handleSucceedResult(succeedCollections, totalImgUrlsInfo);
   handleFailedResult(succeedCollections, totalImgUrlsInfo);
 };
-const resolveParamsFromUrl = (url) => {
-  const urlObj = new URL(url);
-  const regex = /file\/([-\w]+)\//;
-  const match = urlObj.pathname.match(regex);
-  let key;
-  if (match) {
-    key = match[1];
-  }
-  const id = urlObj.searchParams.get('node-id');
-  if (key && id) {
-    return {
-      key,
-      id,
-    };
-  } else {
-    throw new Error('Failure to parse parameters from URL');
-  }
-};
 const getETag = async (imgUrlsInfo) => {
   console.log(picocolors.green('Compare Etag...'));
-  const totalNums = Object.keys(imgUrlsInfo).length;
+  const entries = Object.entries(imgUrlsInfo);
+  const totalNums = entries.length;
   const { progressBar } = useProgressBar();
   progressBar.start(totalNums, 0);
-  const promises = Object.entries(imgUrlsInfo).map(([id, { url }]) => () => {
-    return useETag({
-      id,
-      url,
-      onComplete: progressBar.increment.bind(progressBar),
-    });
-  });
+  const promises = entries.map(
+    ([id, { url }]) =>
+      () =>
+        useETag({
+          id,
+          url,
+          onComplete: progressBar.increment.bind(progressBar),
+        }),
+  );
   const result = await promisePool(promises, totalNums);
-  const eTags = result
+  return result
     .filter((item) => item.status === 'fulfilled')
-    .map((item) => item.value.eTag);
-  return { eTags };
+    .map((item) => item.value?.eTag);
 };
-const filterByMetadata = (metadata) => {
-  return ([id]) => {
+const createMetadataFilter =
+  (metadata) =>
+  ([id]) => {
     const curInfo = metadata[id];
     if (!curInfo) {
       return true;
     }
     return curInfo['shouldDownload'];
   };
-};
-const filterByTags = (eTags, metadata) => {
-  return ([id]) => {
+const createETagFilter =
+  (eTags, metadata) =>
+  ([id]) => {
     return !eTags.includes(metadata[id]?.eTag);
   };
-};
 const saveImgs = async (url, options = {}) => {
   try {
     const { key, id } = resolveParamsFromUrl(decodeURIComponent(url));
-    mergedOptions = merge(DEFAULT_DOWNLOAD_OPTIONS, options);
-    const metadata = getMetadata(mergedOptions);
-    figmaApi = await useFigmaApi();
-    let imgUrlsInfo = await getImgUrlsInfo(key, id, getImgUrlsInfo);
-    imgUrlsInfo = Object.fromEntries(
-      Object.entries(imgUrlsInfo).filter(filterByMetadata(metadata)),
+    if (!key || !id) {
+      return;
+    }
+    updateMergedOptions(options);
+    updateMetadataPath();
+    const metadata = getMetadata(metadataPath);
+    const imgUrlsInfo = await getImgUrlsInfo(key, id).then(
+      async (imgUrlsInfo) =>
+        filterObject(
+          filterObject(imgUrlsInfo, createMetadataFilter(metadata)),
+          createETagFilter(await getETag(imgUrlsInfo), metadata),
+        ),
     );
-    const { eTags } = await getETag(imgUrlsInfo);
-    imgUrlsInfo = Object.fromEntries(
-      Object.entries(imgUrlsInfo).filter(filterByTags(eTags, metadata)),
-    );
-    const sdImgNums = Object.keys(imgUrlsInfo).length;
+    const imgUrlEntries = Object.entries(imgUrlsInfo);
+    const sdImgNums = imgUrlEntries.length;
     if (!sdImgNums) {
       console.log('\n' + picocolors.green('Done🎉'));
       return;
     }
     const { progressBar } = useProgressBar(sdImgNums);
-    progressBar.start(sdImgNums, 0);
-    const promises = Object.entries(imgUrlsInfo).map(
-      ([id, { url, name }]) =>
-        () => {
-          const saveDir = mergedOptions.saveDir;
-          const filename = `${name}.${mergedOptions.format}`;
-          return useDownload({
-            id,
-            url,
-            saveDir,
-            filename,
-            previousEtag: metadata[id]?.eTag,
-            onComplete: progressBar.increment.bind(progressBar),
-          });
-        },
-    );
     console.log(picocolors.green('Downloading... 🐢'));
+    progressBar.start(sdImgNums, 0);
+    const promises = imgUrlEntries.map(([id, { url, name }]) => () => {
+      const saveDir = mergedOptions.saveDir;
+      const filename = `${name}.${mergedOptions.format}`;
+      return useDownload({
+        id,
+        url,
+        saveDir,
+        filename,
+        onComplete: progressBar.increment.bind(progressBar),
+      });
+    });
     const result = await promisePool(promises, mergedOptions.concurrency);
     handleResult(result, imgUrlsInfo);
     console.log('\n' + picocolors.green('Done🎉'));

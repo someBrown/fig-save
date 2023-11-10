@@ -1,3 +1,7 @@
+# [1.3.0](https://github.com/someBrown/fig-save/compare/v1.2.0...v1.3.0) (2023-11-10)
+
+
+
 # 1.2.0 (2023-08-30)
 
 
