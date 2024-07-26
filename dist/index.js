@@ -58,7 +58,7 @@ const writeMetadata = (path, metadata) => {
 };
 const resolveParamsFromUrl = (url) => {
   const urlObj = new URL(url);
-  const regex = /file\/([-\w]+)\//;
+  const regex = /design\/([-\w]+)\//;
   const match = urlObj.pathname.match(regex);
   let key;
   if (match) {
@@ -220,7 +220,13 @@ const getImgUrlsInfo = async (key, id) => {
       text: 'Waiting for Figma to parse the file...',
     },
   );
-  const children = fileInfo.nodes[id].document.children;
+  let info = null;
+  if (fileInfo.nodes[id]) {
+    info = fileInfo.nodes[id];
+  } else {
+    info = fileInfo.nodes[id.replace('-', ':')];
+  }
+  const children = info.document.children;
   const imgNamesMap = children
     .filter((child) => mergedOptions.figmaImgTypes.includes(child.type))
     .reduce((acc, cur) => {
@@ -350,7 +356,9 @@ const saveImgs = async (url, options = {}) => {
           createETagFilter(await getETag(imgUrlsInfo), metadata),
         ),
     );
-    const imgUrlEntries = Object.entries(imgUrlsInfo);
+    const imgUrlEntries = Object.entries(imgUrlsInfo).filter(
+      ([_, { url }]) => url,
+    );
     const sdImgNums = imgUrlEntries.length;
     if (!sdImgNums) {
       console.log('\n' + picocolors.green('Done🎉'));

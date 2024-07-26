@@ -1,3 +1,12 @@
+## [1.3.1](https://github.com/someBrown/fig-save/compare/v1.3.0...v1.3.1) (2024-07-26)
+
+
+### Features
+
+* 适配 figma接口变更 ([1d8c89f](https://github.com/someBrown/fig-save/commit/1d8c89f15872c211b5414fd837c030e9733f0468))
+
+
+
 # [1.3.0](https://github.com/someBrown/fig-save/compare/v1.2.0...v1.3.0) (2023-11-10)
 
 
