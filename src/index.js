@@ -41,7 +41,13 @@ const getImgUrlsInfo = async (key, id) => {
       text: 'Waiting for Figma to parse the file...',
     },
   );
-  const children = fileInfo.nodes[id].document.children;
+  let info = null;
+  if (fileInfo.nodes[id]) {
+    info = fileInfo.nodes[id];
+  } else {
+    info = fileInfo.nodes[id.replace('-', ':')];
+  }
+  const children = info.document.children;
   // id=>名称对应 下载的时候指定名称
   const imgNamesMap = children
     .filter((child) => mergedOptions.figmaImgTypes.includes(child.type))
@@ -189,7 +195,10 @@ const saveImgs = async (url, options = {}) => {
         ),
     );
 
-    const imgUrlEntries = Object.entries(imgUrlsInfo);
+    const imgUrlEntries = Object.entries(imgUrlsInfo).filter(
+      // eslint-disable-next-line no-unused-vars
+      ([_, { url }]) => url,
+    );
     const sdImgNums = imgUrlEntries.length;
     if (!sdImgNums) {
       console.log('\n' + picocolors.green('Done🎉'));

@@ -56,7 +56,7 @@ export const writeMetadata = (path, metadata) => {
 
 export const resolveParamsFromUrl = (url) => {
   const urlObj = new URL(url);
-  const regex = /file\/([-\w]+)\//;
+  const regex = /design\/([-\w]+)\//;
   const match = urlObj.pathname.match(regex);
   let key;
   if (match) {
