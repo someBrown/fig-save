@@ -1,3 +1,12 @@
+## [1.3.2](https://github.com/someBrown/fig-save/compare/v1.3.1...v1.3.2) (2024-07-29)
+
+
+### Bug Fixes
+
+* 锁inquirer版本以支持 node14 ([f0e851e](https://github.com/someBrown/fig-save/commit/f0e851e2de4df417433d504391986385243415c4))
+
+
+
 ## [1.3.1](https://github.com/someBrown/fig-save/compare/v1.3.0...v1.3.1) (2024-07-26)
 
 
