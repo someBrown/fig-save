@@ -1,3 +1,12 @@
+## [1.3.3](https://github.com/someBrown/fig-save/compare/v1.3.2...v1.3.3) (2024-07-29)
+
+
+### Bug Fixes
+
+* 严格限制 inquire 版本 ([7ea76be](https://github.com/someBrown/fig-save/commit/7ea76beec1bc3277f8d8d673023de6faeaa6c5f2))
+
+
+
 ## [1.3.2](https://github.com/someBrown/fig-save/compare/v1.3.1...v1.3.2) (2024-07-29)
 
 
